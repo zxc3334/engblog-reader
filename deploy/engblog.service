@@ -1,0 +1,19 @@
+[Unit]
+Description=EngBlog Reader (英文技术博客阅读助手)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/engblog-reader
+Environment=DATA_DIR=/opt/engblog-reader/data
+ExecStart=/opt/engblog-reader/.venv/bin/python /opt/engblog-reader/server/main.py
+Restart=always
+RestartSec=3
+# 1GB 小内存机器：限制占用，防 OOM
+MemoryMax=768M
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

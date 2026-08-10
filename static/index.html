@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>EngBlog Reader · 英文技术博客阅读助手</title>
+<meta name="theme-color" content="#2563eb">
+<meta name="description" content="英文技术博客阅读助手：划词翻译、TTS 朗读、划线笔记、阅读历史">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EngBlog">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" id="hljs-theme">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div id="app" class="app">
+
+  <!-- ======= 顶栏 ======= -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="btn icon-btn" id="btn-home" title="返回首页"><span>⌂</span></button>
+      <h1 class="brand" id="brand-title">EngBlog <em>Reader</em></h1>
+      <span class="article-title" id="top-article-title"></span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn" id="btn-import">＋ 导入 Markdown</button>
+      <button class="btn ghost" id="btn-read-aloud" title="全文朗读 / 停止">🔊 朗读</button>
+      <button class="btn icon-btn" id="btn-settings" title="设置">⚙</button>
+      <button class="btn icon-btn" id="btn-sidebar" title="历史 / 笔记">☰</button>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ======= 主区 ======= -->
+    <main class="main" id="main">
+      <!-- 首页：文章列表 -->
+      <section id="view-home" class="view">
+        <div class="home-head">
+          <h2>阅读历史</h2>
+          <input type="search" id="search-box" placeholder="搜索标题 / 来源…" class="search">
+        </div>
+        <div id="article-list" class="article-list"></div>
+        <div class="empty-tip" id="home-empty" hidden>
+          <p>还没有文章。点击右上角「导入 Markdown」开始阅读。</p>
+        </div>
+      </section>
+
+      <!-- 阅读页 -->
+      <section id="view-reader" class="view" hidden>
+        <article class="reader" id="reader">
+          <header class="reader-head">
+            <h1 id="reader-title"></h1>
+            <div class="reader-meta" id="reader-meta"></div>
+          </header>
+          <div class="reader-content" id="article-content"></div>
+        </article>
+      </section>
+    </main>
+
+    <!-- ======= 右侧栏：历史 / 笔记 ======= -->
+    <aside class="sidebar" id="sidebar" hidden>
+      <nav class="sidebar-tabs">
+        <button class="tab active" data-tab="history">历史</button>
+        <button class="tab" data-tab="notes">笔记 <span class="badge" id="notes-badge"></span></button>
+      </nav>
+      <div class="sidebar-body">
+        <div class="tab-panel" id="panel-history">
+          <div id="sidebar-articles"></div>
+        </div>
+        <div class="tab-panel" id="panel-notes" hidden>
+          <div id="sidebar-notes"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ======= 划词浮层 ======= -->
+  <div id="sel-toolbar" class="sel-toolbar" hidden>
+    <button data-act="translate">翻译</button>
+    <button data-act="translate-para">整段</button>
+    <button data-act="read">朗读</button>
+    <button data-act="highlight">高亮</button>
+    <button data-act="note">笔记</button>
+  </div>
+
+  <!-- ======= 段落浮层 ======= -->
+  <div id="para-tool" class="para-tool" hidden>
+    <button data-act="p-translate" title="翻译整段">译</button>
+    <button data-act="p-read" title="朗读整段">读</button>
+  </div>
+
+  <!-- ======= 翻译结果面板 ======= -->
+  <div id="trans-panel" class="trans-panel" hidden>
+    <div class="trans-head">
+      <span class="trans-label">翻译</span>
+      <div class="trans-actions">
+        <button class="mini" id="trans-read">🔊 读译文</button>
+        <button class="mini" id="trans-copy">⧉ 复制</button>
+        <button class="mini danger" id="trans-close">✕</button>
+      </div>
+    </div>
+    <div class="trans-src" id="trans-src"></div>
+    <div class="trans-body" id="trans-body"></div>
+  </div>
+
+  <!-- ======= 高亮气泡 ======= -->
+  <div id="hl-bubble" class="hl-bubble" hidden>
+    <div class="hl-text" id="hl-bubble-text"></div>
+    <textarea id="hl-bubble-note" placeholder="写点笔记…"></textarea>
+    <div class="hl-bubble-actions">
+      <button class="mini primary" id="hl-save-note">保存</button>
+      <button class="mini danger" id="hl-delete">删除划线</button>
+    </div>
+  </div>
+
+  <!-- ======= 模态框：导入 ======= -->
+  <div class="modal-mask" id="import-modal" hidden>
+    <div class="modal">
+      <h3>导入 Markdown 文章</h3>
+      <label class="field"><span>标题（留空自动识别）</span>
+        <input type="text" id="import-title" placeholder="自动从 # 一级标题识别"></label>
+      <label class="field"><span>原文链接（粘贴后自动抓取正文）</span>
+        <div class="url-row">
+          <input type="text" id="import-url" placeholder="https://example.com/article">
+          <button class="btn" id="fetch-btn">↧ 抓取正文</button>
+        </div>
+        <div class="fetch-status" id="fetch-status"></div></label>
+      <label class="field"><span>文章内容（Markdown）</span>
+        <textarea id="import-content" rows="14" placeholder="在此粘贴或拖入 .md 文件内容…"></textarea></label>
+      <div class="modal-actions">
+        <span class="hint">支持粘贴 / 拖入 .md 文件</span>
+        <button class="btn ghost" data-close="import-modal">取消</button>
+        <button class="btn primary" id="import-confirm">开始阅读</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 模态框：设置 ======= -->
+  <div class="modal-mask" id="settings-modal" hidden>
+    <div class="modal">
+      <h3>设置</h3>
+      <div class="settings-section">
+        <h4>LLM 翻译接口 <span class="hint">（OpenAI 兼容协议，可填云端或本地 Ollama / vLLM）</span></h4>
+        <label class="field"><span>Base URL</span>
+          <input type="text" id="cfg-base-url" placeholder="https://api.deepseek.com/v1 或 http://localhost:11434/v1"></label>
+        <label class="field"><span>API Key</span>
+          <input type="password" id="cfg-api-key" placeholder="留空 = 使用环境变量或本地模型"></label>
+        <label class="field"><span>模型名</span>
+          <input type="text" id="cfg-model" placeholder="deepseek-chat / gpt-4o-mini / qwen2.5:7b"></label>
+        <div class="field-row">
+          <label class="field"><span>目标语言</span>
+            <input type="text" id="cfg-target-lang" value="中文"></label>
+          <label class="field"><span>翻译风格</span>
+            <select id="cfg-style">
+              <option value="fluent">流畅直译</option>
+              <option value="explain">直译 + 术语解释</option>
+            </select></label>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h4>朗读（TTS）</h4>
+        <div class="field-row">
+          <label class="field"><span>语速</span>
+            <input type="range" id="cfg-tts-rate" min="0.5" max="1.8" step="0.1"></label>
+          <label class="field"><span>引擎</span>
+            <select id="cfg-tts-engine">
+              <option value="edge">Edge 神经语音（高质量 · 需联网）</option>
+              <option value="browser">浏览器内置（离线 · 音色随系统）</option>
+            </select></label>
+        </div>
+        <label class="field"><span>音色（标注性别，可试听）</span>
+          <div class="url-row">
+            <select id="cfg-tts-voice"></select>
+            <button class="btn" id="cfg-voice-test">🔊 试听</button>
+          </div>
+        </label>
+      </div>
+      <div class="settings-section">
+        <h4>数据管理 <span class="hint">存储于本地 SQLite</span></h4>
+        <div class="data-path" id="cfg-data-path"></div>
+        <div class="data-actions">
+          <button class="btn ghost" id="cfg-export">⇩ 导出全部数据（JSON）</button>
+          <button class="btn ghost" id="cfg-import">⇧ 从备份恢复</button>
+          <input type="file" id="cfg-import-file" accept=".json,application/json" hidden>
+        </div>
+      </div>
+      <div id="cfg-status" class="cfg-status"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cfg-test">测试连接</button>
+        <button class="btn ghost" data-close="settings-modal">取消</button>
+        <button class="btn primary" id="cfg-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= 模态框：笔记编辑 ======= -->
+  <div class="modal-mask" id="note-modal" hidden>
+    <div class="modal small">
+      <h3>划线笔记</h3>
+      <div class="note-preview" id="note-preview"></div>
+      <textarea id="note-text" rows="6" placeholder="记录你的想法、翻译、问题…"></textarea>
+      <div class="modal-actions">
+        <button class="btn ghost" data-close="note-modal">取消</button>
+        <button class="btn primary" id="note-confirm">保存笔记</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- toast -->
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
