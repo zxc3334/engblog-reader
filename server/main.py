@@ -61,6 +61,10 @@ class HighlightIn(BaseModel):
     end_offset: int
     note: str = ""
     color: str = ""
+    kind: str = "hl"          # hl=划线笔记 | word=词义笔记
+    word: str = ""            # 词义笔记：目标单词
+    context: str = ""         # 词义笔记：上下文片段
+    content: str = ""         # 词义笔记：LLM 词义内容
 
 
 class NoteIn(BaseModel):
@@ -100,6 +104,13 @@ class ConfigIn(BaseModel):
 
 class ExportData(BaseModel):
     articles: list = []
+
+
+# ---------------- 临时诊断端点 ----------------
+@app.post("/api/debug")
+def api_debug(d: dict):
+    log.error("CLIENT JS ERROR: %s", json.dumps(d, ensure_ascii=False)[:1500])
+    return {"ok": True}
 
 
 # ---------------- articles ----------------
@@ -150,7 +161,8 @@ def api_delete_article(aid: int):
 def api_add_highlight(aid: int, h: HighlightIn):
     if not db.get_article(aid):
         raise HTTPException(404, "文章不存在")
-    hid = db.add_highlight(aid, h.text, h.start_offset, h.end_offset, h.note, h.color)
+    hid = db.add_highlight(aid, h.text, h.start_offset, h.end_offset,
+                           h.note, h.color, h.kind, h.word, h.context, h.content)
     return {"id": hid}
 
 

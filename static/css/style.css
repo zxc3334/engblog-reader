@@ -338,3 +338,14 @@ textarea { resize: vertical; line-height: 1.6; }
   text-decoration: underline dotted var(--accent);
   text-underline-offset: 2px;
 }
+
+/* 词义笔记：标签 + 正文预览 */
+.sb-item .badge.word {
+  display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent); margin-right: 4px;
+  vertical-align: 1px; letter-spacing: .03em;
+}
+.sb-item.word-note .word-note-body {
+  margin-top: 2px; color: var(--text-2); font-size: 12px; line-height: 1.55;
+  white-space: normal; word-break: break-word;
+}

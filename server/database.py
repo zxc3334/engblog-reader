@@ -41,11 +41,25 @@ def init_db():
             start_offset INTEGER,
             end_offset   INTEGER,
             color        TEXT DEFAULT '',
+            kind         TEXT DEFAULT 'hl',
+            word         TEXT DEFAULT '',
+            context      TEXT DEFAULT '',
+            content      TEXT DEFAULT '',
             created_at   REAL
         );
         CREATE INDEX IF NOT EXISTS idx_hl_article ON highlights(article_id);
         """
     )
+    # 迁移：老库补齐新列（kind/word/context/content），已存在则跳过
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(highlights)")}
+    for col, ddl in {
+        "kind": "ALTER TABLE highlights ADD COLUMN kind TEXT DEFAULT 'hl'",
+        "word": "ALTER TABLE highlights ADD COLUMN word TEXT DEFAULT ''",
+        "context": "ALTER TABLE highlights ADD COLUMN context TEXT DEFAULT ''",
+        "content": "ALTER TABLE highlights ADD COLUMN content TEXT DEFAULT ''",
+    }.items():
+        if col not in existing:
+            conn.execute(ddl)
     conn.commit()
 
 
@@ -134,7 +148,9 @@ def import_all(payload: dict) -> tuple:
         for h in a.get("highlights") or []:
             if h.get("text") and h.get("start_offset") is not None and h.get("end_offset") is not None:
                 add_highlight(aid, h["text"], h["start_offset"], h["end_offset"],
-                              h.get("note") or "", h.get("color") or "")
+                              h.get("note") or "", h.get("color") or "",
+                              h.get("kind") or "hl", h.get("word") or "",
+                              h.get("context") or "", h.get("content") or "")
                 n_hl += 1
         n_art += 1
     return n_art, n_hl
@@ -166,12 +182,13 @@ def backup_if_changed() -> str | None:
 
 
 # ---------------- highlights ----------------
-def add_highlight(article_id, text, start_offset, end_offset, note="", color=""):
+def add_highlight(article_id, text, start_offset, end_offset, note="", color="",
+                  kind="hl", word="", context="", content=""):
     with _lock:
         cur = _get_conn().execute(
-            "INSERT INTO highlights (article_id, text, note, start_offset, end_offset, color, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (article_id, text, note, start_offset, end_offset, color, now()),
+            "INSERT INTO highlights (article_id, text, note, start_offset, end_offset, color, "
+            "kind, word, context, content, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (article_id, text, note, start_offset, end_offset, color, kind, word, context, content, now()),
         )
         _get_conn().commit()
         return cur.lastrowid

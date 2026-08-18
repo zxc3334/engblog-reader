@@ -738,6 +738,7 @@ function getContextAround(start, end, pad = 70) {
 function showWordPanel(s) {
   const word = s.text.trim().replace(/[^A-Za-z'-]+$/, '');
   const ctx = getContextAround(s.start, s.end);
+  state.wordNote = { word, context: ctx, start: s.start, end: s.end }; // 供「存笔记」使用
   $('#word-label').textContent = word;
   // 上下文里高亮该词
   const snip = ctx || s.text;
@@ -775,6 +776,34 @@ $('#word-copy').addEventListener('click', async () => {
 $('#word-read').addEventListener('click', () => {
   const word = $('#word-label').textContent;
   if (word) { stopTts(); speakRaw(word); }
+});
+
+/** 词义笔记：把 LLM 词义内容存入笔记（kind=word，区别于划线笔记） */
+async function saveWordNote(o) {
+  const r = await api(`/api/articles/${state.current.id}/highlights`, {
+    method: 'POST',
+    body: JSON.stringify({
+      text: o.word, start_offset: o.start, end_offset: Math.max(o.start + 1, o.end),
+      note: '', color: '', kind: 'word', word: o.word, context: o.context || '', content: o.content,
+    }),
+  });
+  state.highlights.push({ id: r.id, text: o.word, note: '', start_offset: o.start,
+    end_offset: Math.max(o.start + 1, o.end), kind: 'word', word: o.word,
+    context: o.context || '', content: o.content });
+  renderNotesSidebar();
+  return r.id;
+}
+
+$('#word-note').addEventListener('click', async () => {
+  const body = $('#word-body');
+  const content = body.textContent.trim();
+  if (!content || body.classList.contains('error')) { toast('没有可保存的词义内容，请先查询'); return; }
+  const w = state.wordNote;
+  if (!w) { toast('缺少单词信息'); return; }
+  try {
+    await saveWordNote({ word: w.word, context: w.context, content, start: w.start, end: w.end });
+    toast('✅ 已存入词义笔记');
+  } catch (e) { toast(e.message); }
 });
 
 /* ---------------- TTS 朗读 ---------------- */
@@ -973,10 +1002,28 @@ $('#hl-delete').addEventListener('click', async () => {
 
 function jumpToHighlight(hid) {
   const mark = $(`mark.hl[data-hid="${hid}"]`);
-  if (!mark) return;
-  mark.scrollIntoView({ block: 'center' });
-  mark.classList.add('hl-flash');
-  setTimeout(() => mark.classList.remove('hl-flash'), 1600);
+  if (mark) {
+    mark.scrollIntoView({ block: 'center' });
+    mark.classList.add('hl-flash');
+    setTimeout(() => mark.classList.remove('hl-flash'), 1600);
+    return;
+  }
+  // 词义笔记：没有 mark，按字符偏移定位并闪烁
+  const h = state.highlights.find((x) => x.id === hid);
+  if (!h || h.start_offset == null) return;
+  try {
+    const range = rangeFromChars(h.start_offset, Math.max(h.start_offset + 1, h.end_offset || h.start_offset + 1));
+    const r = range.getBoundingClientRect();
+    if (r && (r.width || r.height)) {
+      const main = $('#main');
+      main.scrollTo({ top: main.scrollTop + r.top - main.getBoundingClientRect().top - main.clientHeight / 2, behavior: 'smooth' });
+      const pos = document.createElement('span');
+      pos.className = 'hl-flash';
+      pos.style.cssText = 'position:absolute;left:' + r.left + 'px;top:' + (r.top - 2) + 'px;width:' + Math.max(r.width, 20) + 'px;height:' + r.height + 'px;border-radius:3px;pointer-events:none;';
+      document.body.appendChild(pos);
+      setTimeout(() => pos.remove(), 1600);
+    }
+  } catch (e) { /* 忽略定位失败 */ }
 }
 
 /* ---------------- 侧边栏 ---------------- */
@@ -1012,13 +1059,25 @@ function renderNotesSidebar() {
   const notes = state.highlights;
   $('#notes-badge').textContent = notes.length || '';
   $('#sidebar-notes').innerHTML = notes.length
-    ? notes.map((h) => `<div class="sb-item" data-hid="${h.id}">
+    ? notes.map((h) => {
+      if (h.kind === 'word') {
+        const c = h.content || '';
+        return `<div class="sb-item word-note" data-hid="${h.id}">
+          <div class="sb-item-head">
+            <div class="t"><span class="badge word">词义</span> ${esc(h.word || h.text || '')}</div>
+            <button class="mini danger del-note" title="删除词义笔记">✕</button>
+          </div>
+          <div class="note word-note-body">${esc(c.slice(0, 140))}${c.length > 140 ? '…' : ''}</div>
+        </div>`;
+      }
+      return `<div class="sb-item" data-hid="${h.id}">
         <div class="sb-item-head">
           <div class="t">${esc(h.text.slice(0, 60))}${h.text.length > 60 ? '…' : ''}</div>
           <button class="mini danger del-note" title="删除划线及笔记">✕</button>
         </div>
         ${h.note ? `<div class="note">${esc(h.note)}</div>` : '<div class="m">（无笔记）</div>'}
-      </div>`).join('')
+      </div>`;
+    }).join('')
     : '<div class="sb-empty">划线高亮后会显示在这里</div>';
 }
 $('#sidebar-notes').addEventListener('click', async (e) => {
