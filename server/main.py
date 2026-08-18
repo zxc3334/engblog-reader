@@ -106,13 +106,6 @@ class ExportData(BaseModel):
     articles: list = []
 
 
-# ---------------- 临时诊断端点 ----------------
-@app.post("/api/debug")
-def api_debug(d: dict):
-    log.error("CLIENT JS ERROR: %s", json.dumps(d, ensure_ascii=False)[:1500])
-    return {"ok": True}
-
-
 # ---------------- articles ----------------
 @app.get("/api/articles")
 def api_list_articles():

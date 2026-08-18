@@ -14,18 +14,6 @@
 <meta name="apple-mobile-web-app-title" content="EngBlog">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" id="hljs-theme">
 <link rel="stylesheet" href="/static/css/style.css?v=20260818b">
-<script>
-/* 临时诊断 */
-window.addEventListener('error', function (e) {
-  var msg = 'err: ' + e.message + ' @ ' + (e.filename || '').split('/').pop() + ':' + e.lineno + ':' + e.colno;
-  try { fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, stack: e.error && e.error.stack ? String(e.error.stack).slice(0, 1200) : '' }) }).catch(function () {}); } catch (x) {}
-});
-window.addEventListener('unhandledrejection', function (e) {
-  var r = e.reason || {};
-  var msg = 'unhandled: ' + (r.message || String(r));
-  try { fetch('/api/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, stack: r.stack ? String(r.stack).slice(0, 1200) : '' }) }).catch(function () {}); } catch (x) {}
-});
-</script>
 </head>
 <body>
 <div id="app" class="app">
