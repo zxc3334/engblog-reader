@@ -141,17 +141,6 @@ textarea { resize: vertical; line-height: 1.6; }
 
 /* 段落 hover 动作区 */
 .reader-content p, .reader-content li { position: relative; }
-.para-tool {
-  position: fixed; display: flex; gap: 4px; background: var(--card);
-  border: 1px solid var(--border); border-radius: 6px; padding: 3px;
-  box-shadow: var(--shadow); z-index: 40;
-}
-.para-tool button {
-  border: none; background: transparent; color: var(--text-2);
-  padding: 3px 8px; border-radius: 4px; font-size: 12.5px;
-}
-.para-tool button:hover { background: var(--accent-soft); color: var(--accent); }
-
 /* 高亮 mark */
 .reader-content mark.hl {
   background: var(--hl); color: inherit; border-radius: 2px;
@@ -322,8 +311,6 @@ textarea { resize: vertical; line-height: 1.6; }
   /* 划词浮层：大触控目标 */
   .sel-toolbar { padding: 6px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
   .sel-toolbar button { padding: 10px 12px; font-size: 14px; min-height: 40px; }
-  .para-tool button { padding: 9px 12px; min-height: 40px; }
-
   /* 翻译面板 / 笔记气泡：近全宽底部贴边 */
   .trans-panel, .hl-bubble { width: calc(100vw - 20px); }
 
@@ -336,4 +323,18 @@ textarea { resize: vertical; line-height: 1.6; }
 /* 安全区域适配（刘海屏） */
 @supports (padding: env(safe-area-inset-bottom)) {
   .main { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+}
+
+
+/* 词义按钮：非单次选词时置灰 */
+.sel-toolbar button:disabled {
+  opacity: .35;
+  pointer-events: none;
+}
+/* 词义面板：上下文中的目标词高亮 */
+#word-context b {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline dotted var(--accent);
+  text-underline-offset: 2px;
 }

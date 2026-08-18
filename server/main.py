@@ -73,6 +73,11 @@ class TranslateIn(BaseModel):
     target_lang: str | None = None
 
 
+class WordIn(BaseModel):
+    word: str
+    context: str = ""
+
+
 class FetchIn(BaseModel):
     url: str
 
@@ -301,21 +306,12 @@ def api_import(data: ExportData):
 
 
 # ---------------- llm / config ----------------
-@app.post("/api/translate")
-async def api_translate(t: TranslateIn):
-    """Streaming SSE proxy to the configured LLM."""
-    cfg = load_config()
-    if t.style:
-        cfg["style"] = t.style
-    if t.target_lang:
-        cfg["target_lang"] = t.target_lang
-    text = t.text.strip()
-    if not text:
-        raise HTTPException(400, "翻译内容为空")
+def _sse_response(agen, err_prefix="出错"):
+    """把 LLM 流式异步生成器包装成 SSE StreamingResponse（统一错误处理）。"""
 
     async def gen():
         try:
-            async for chunk in llm.stream_translate(text, cfg):
+            async for chunk in agen:
                 if chunk == "[DONE]":
                     yield "data: [DONE]\n\n"
                 else:
@@ -327,14 +323,40 @@ async def api_translate(t: TranslateIn):
             yield f"data: {json.dumps({'error': f'HTTP {e.status}: {e.body}'}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:  # noqa: BLE001
-            log.exception("translate failed")
-            yield f"data: {json.dumps({'error': f'翻译出错: {e}'}, ensure_ascii=False)}\n\n"
+            log.exception("%s failed", err_prefix)
+            yield f"data: {json.dumps({'error': f'{err_prefix}: {e}'}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         gen(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/translate")
+async def api_translate(t: TranslateIn):
+    """Streaming SSE proxy to the configured LLM."""
+    cfg = load_config()
+    if t.style:
+        cfg["style"] = t.style
+    if t.target_lang:
+        cfg["target_lang"] = t.target_lang
+    text = t.text.strip()
+    if not text:
+        raise HTTPException(400, "翻译内容为空")
+    return _sse_response(llm.stream_translate(text, cfg), err_prefix="翻译出错")
+
+
+@app.post("/api/word")
+async def api_word(w: WordIn):
+    """单词语义：上下文推断含义 + 常规含义（流式 SSE）。"""
+    word = w.word.strip()
+    if not word:
+        raise HTTPException(400, "单词不能为空")
+    return _sse_response(
+        llm.stream_word_meaning(word, (w.context or "").strip(), load_config()),
+        err_prefix="查询词义出错",
     )
 
 

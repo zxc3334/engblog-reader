@@ -1,6 +1,10 @@
 /* ============ EngBlog Reader · 前端逻辑 ============ */
 'use strict';
 
+// 部分手机浏览器/WebView 没有 speechSynthesis 全局对象，直接访问会抛 ReferenceError，
+// 这里统一绑定：不存在时值为 undefined，配合各处 if 判断即可安全兜底。
+const speechSynthesis = window.speechSynthesis;
+
 /* ---------------- 基础工具 ---------------- */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -152,8 +156,8 @@ function showHome() {
 }
 
 async function openArticle(id, opts = {}) {
-  stopTts();
   try {
+    try { stopTts(); } catch (e) { /* TTS 异常不应阻止打开文章 */ }
     const art = await api(`/api/articles/${id}`);
     state.current = art;
     state.highlights = art.highlights || [];
@@ -422,6 +426,7 @@ $('#cfg-voice-test').addEventListener('click', () => {
       .then((blob) => { new Audio(URL.createObjectURL(blob)).play(); })
       .catch((e) => toast('试听失败（需联网）：' + e.message));
   } else {
+    if (!speechSynthesis) { toast('当前浏览器不支持朗读'); return; }
     const v = availableVoices().find((x) => x.voiceURI === voice) || null;
     const u = new SpeechSynthesisUtterance(sample);
     if (v) u.voice = v;
@@ -545,6 +550,9 @@ function handleSelection(e) {
   const end = charPos(range.endContainer, range.endOffset);
   if (end - start < 1) { clearSelectionUi(); return; }
   selState = { start, end, text, rect: range.getBoundingClientRect() };
+  // 词义按钮：仅对"单个英文单词"启用（多选/中文/带空格时置灰）
+  const wordBtn = $('#btn-word');
+  if (wordBtn) wordBtn.disabled = !/^[A-Za-z][A-Za-z'-]*$/.test(text);
   positionSelToolbar();
 }
 
@@ -570,10 +578,10 @@ $('#sel-toolbar').addEventListener('click', (e) => {
   if (act === 'translate') {
     showTransPanel(s.rect, s.text);
     startTranslation(s.text);
-  } else if (act === 'translate-para') {
-    translateCurrentPara();
+  } else if (act === 'word') {
+    showWordPanel(s);
   } else if (act === 'read') {
-    speechSynthesis.cancel();
+    if (speechSynthesis) speechSynthesis.cancel();
     speakRaw(s.text);
   } else if (act === 'highlight') {
     createHighlight(s.start, s.end, s.text, '');
@@ -609,62 +617,6 @@ async function createHighlight(start, end, text, note) {
   return r.id;
 }
 
-/* ---------------- 段落浮层 ---------------- */
-let paraEl = null;
-const contentRoot = () => $('#article-content');
-
-$('#article-content').addEventListener('mouseover', (e) => {
-  if (isTouchDevice()) return; // 触屏没有 hover，段落翻译走「划词 → 整段」
-  if (state.tts.active) return;
-  if (!window.getSelection()?.isCollapsed) return;
-  const block = e.target.closest('p, li, h1, h2, h3, h4, h5, h6');
-  if (!block || block.closest('pre')) { hideParaTool(); return; }
-  if (e.target.closest('mark.hl')) return;
-  paraEl = block;
-  const tool = $('#para-tool');
-  const r = block.getBoundingClientRect();
-  tool.style.top = (r.top + 8) + 'px';
-  tool.style.left = (Math.min(r.right + 6, window.innerWidth - 90)) + 'px';
-  tool.hidden = false;
-});
-$('#article-content').addEventListener('mouseout', (e) => {
-  const tool = $('#para-tool');
-  if (!tool.contains(e.relatedTarget)) hideParaTool();
-});
-$('#para-tool').addEventListener('mousedown', (e) => e.preventDefault());
-$('#para-tool').addEventListener('click', (e) => {
-  const btn = e.target.closest('button');
-  if (!btn || !paraEl) return;
-  const text = paraEl.textContent.trim();
-  if (!text) return;
-  if (btn.dataset.act === 'p-translate') {
-    const r = paraEl.getBoundingClientRect();
-    showTransPanel(r, text);
-    startTranslation(text);
-  } else if (btn.dataset.act === 'p-read') {
-    speechSynthesis.cancel();
-    speakBlock(paraEl);
-  }
-  hideParaTool();
-});
-function hideParaTool() { $('#para-tool').hidden = true; paraEl = null; }
-
-function translateCurrentPara() {
-  const sel = window.getSelection();
-  let block = null;
-  if (sel && !sel.isCollapsed && sel.rangeCount) {
-    const r = sel.getRangeAt(0);
-    block = r.startContainer.closest ? r.startContainer.closest('p, li, h1,h2,h3,h4,h5,h6') : null;
-  }
-  if (!block) block = paraEl;
-  if (!block || !state.current) { toast('未找到段落'); return; }
-  const text = block.textContent.trim();
-  if (!text) return;
-  const r = block.getBoundingClientRect();
-  showTransPanel(r, text);
-  startTranslation(text);
-}
-
 /* ---------------- 翻译面板（SSE 流式） ---------------- */
 let transBusy = false;
 
@@ -695,32 +647,30 @@ $('#trans-copy').addEventListener('click', async () => {
   catch (e) { toast('复制失败'); }
 });
 $('#trans-read').addEventListener('click', () => {
-  const txt = $('#trans-body').textContent;
-  if (txt && !$('#trans-body').classList.contains('error')) { speechSynthesis.cancel(); speakRaw(txt); }
+  // 朗读英文原文（trans-src），而不是中文译文
+  const txt = $('#trans-src').textContent;
+  if (txt) { stopTts(); speakRaw(txt); }
 });
 
-async function startTranslation(text) {
-  transBusy = true;
-  const body = $('#trans-body');
+/** 通用 SSE 流式面板渲染：把 /api/translate / /api/word 的流式结果写入面板 body */
+async function streamPanel(body, url, payload) {
   body.textContent = '';
   body.classList.remove('error');
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
   body.appendChild(cursor);
-  const cfg = state.config;
   let out = '';
   try {
-    const resp = await fetch('/api/translate', {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, style: cfg.style, target_lang: cfg.target_lang }),
+      body: JSON.stringify(payload),
     });
     if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || '请求失败');
     const reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
-    let done = false;
-    while (!done) {
+    while (true) {
       const { done: d, value } = await reader.read();
       if (d) break;
       buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
@@ -730,14 +680,13 @@ async function startTranslation(text) {
         const line = ev.split('\n').find((l) => l.startsWith('data:'));
         if (!line) continue;
         const data = line.slice(5).trim();
-        if (data === '[DONE]') { done = true; break; }
+        if (data === '[DONE]') return;
         let obj;
         try { obj = JSON.parse(data); } catch (e) { continue; }
         if (obj.error) {
           body.classList.add('error');
           body.textContent = '⚠ ' + obj.error;
           cursor.remove();
-          transBusy = false;
           return;
         }
         if (obj.delta) {
@@ -750,12 +699,81 @@ async function startTranslation(text) {
     }
   } catch (e) {
     body.classList.add('error');
-    body.textContent = '⚠ 翻译出错：' + e.message;
+    body.textContent = '⚠ 请求出错：' + e.message;
   } finally {
     cursor.remove();
-    transBusy = false;
   }
 }
+
+function startTranslation(text) {
+  transBusy = true;
+  const cfg = state.config;
+  streamPanel($('#trans-body'), '/api/translate', {
+    text, style: cfg.style, target_lang: cfg.target_lang,
+  }).finally(() => { transBusy = false; });
+}
+
+/* ---------------- 词义面板（单词语义：上下文推断 + 常规含义） ---------------- */
+/** 取选区前后各 pad 字符的上下文文本（跨多个文本节点） */
+function getContextAround(start, end, pad = 70) {
+  const nodes = textNodes();
+  let acc = 0, out = '', started = false;
+  for (const n of nodes) {
+    const len = n.nodeValue.length;
+    const nStart = acc, nEnd = acc + len;
+    if (!started && nEnd > start - pad) started = true;
+    if (started) {
+      const from = Math.max(nStart, start - pad) - nStart;
+      const to = Math.min(nEnd, end + pad) - nStart;
+      if (from < to) out += n.nodeValue.slice(from, to);
+      if (nEnd >= end + pad) break;
+    }
+    acc += len;
+  }
+  return out.trim();
+}
+
+function showWordPanel(s) {
+  const word = s.text.trim().replace(/[^A-Za-z'-]+$/, '');
+  const ctx = getContextAround(s.start, s.end);
+  $('#word-label').textContent = word;
+  // 上下文里高亮该词
+  const snip = ctx || s.text;
+  const i = ctx ? snip.indexOf(s.text.trim()) : -1;
+  $('#word-context').innerHTML = (ctx && i >= 0)
+    ? '…' + esc(snip.slice(0, i)) + '<b>' + esc(s.text.trim()) + '</b>' + esc(snip.slice(i + s.text.trim().length)) + '…'
+    : esc(snip);
+  const panel = $('#word-panel');
+  const body = $('#word-body');
+  body.textContent = '';
+  body.classList.remove('error');
+  panel.hidden = false; // 先显示才能测量尺寸
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  const r = s.rect;
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8));
+  let top = r.bottom + 10;
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 10);
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+  startWordMeaning(word, ctx);
+}
+
+function startWordMeaning(word, context) {
+  transBusy = true;
+  streamPanel($('#word-body'), '/api/word', { word, context })
+    .finally(() => { transBusy = false; });
+}
+
+$('#word-close').addEventListener('click', () => { $('#word-panel').hidden = true; });
+$('#word-copy').addEventListener('click', async () => {
+  const txt = $('#word-body').textContent;
+  if (!txt) return;
+  try { await navigator.clipboard.writeText(txt); toast('已复制'); } catch (e) { toast('复制失败'); }
+});
+$('#word-read').addEventListener('click', () => {
+  const word = $('#word-label').textContent;
+  if (word) { stopTts(); speakRaw(word); }
+});
 
 /* ---------------- TTS 朗读 ---------------- */
 /* Edge 神经语音：内置高质量美音男声/女声列表（需联网，跨平台一致） */
@@ -845,6 +863,7 @@ async function speakEdge(text, onEnd) {
 function speakText(text, onEnd) {
   if (!text || !text.trim()) { if (onEnd) onEnd(); return; }
   if (ttsEngine() === 'edge') return speakEdge(text, onEnd);
+  if (!speechSynthesis) { if (onEnd) onEnd(); return; }
   const u = new SpeechSynthesisUtterance(text);
   const v = pickVoice();
   if (v) u.voice = v;
@@ -852,15 +871,9 @@ function speakText(text, onEnd) {
   u.rate = state.config.tts_rate ?? 1;
   if (onEnd) u.onend = onEnd;
   u.onerror = () => { if (onEnd) onEnd(); };
-  speechSynthesis.speak(u);
+  if (speechSynthesis) speechSynthesis.speak(u);
 }
 function speakRaw(text) { speakText(text); }
-
-function speakBlock(el) {
-  stopTts();
-  el.classList.add('reading');
-  speakText(el.textContent, () => el.classList.remove('reading'));
-}
 
 function ttsBlocks() {
   return $$('#article-content p, #article-content li, #article-content h1, #article-content h2, '
@@ -1043,8 +1056,9 @@ document.addEventListener('click', (e) => {
   // 点击高亮 mark 本身：由文章内的处理器弹出气泡，这里不能拦截关闭
   if (e.target.closest && e.target.closest('mark.hl')) return;
   if (!e.target.closest('#sel-toolbar') && !e.target.closest('#trans-panel')
-    && !e.target.closest('#hl-bubble')) {
+    && !e.target.closest('#word-panel') && !e.target.closest('#hl-bubble')) {
     $('#trans-panel').hidden = true;
+    $('#word-panel').hidden = true;
     $('#hl-bubble').hidden = true;
     clearSelectionUi();
   }

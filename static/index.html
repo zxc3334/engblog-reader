@@ -81,16 +81,10 @@
   <!-- ======= 划词浮层 ======= -->
   <div id="sel-toolbar" class="sel-toolbar" hidden>
     <button data-act="translate">翻译</button>
-    <button data-act="translate-para">整段</button>
+    <button id="btn-word" data-act="word" title="查单个单词：上下文推断 + 常规含义">词义</button>
     <button data-act="read">朗读</button>
     <button data-act="highlight">高亮</button>
     <button data-act="note">笔记</button>
-  </div>
-
-  <!-- ======= 段落浮层 ======= -->
-  <div id="para-tool" class="para-tool" hidden>
-    <button data-act="p-translate" title="翻译整段">译</button>
-    <button data-act="p-read" title="朗读整段">读</button>
   </div>
 
   <!-- ======= 翻译结果面板 ======= -->
@@ -98,13 +92,27 @@
     <div class="trans-head">
       <span class="trans-label">翻译</span>
       <div class="trans-actions">
-        <button class="mini" id="trans-read">🔊 读译文</button>
+        <button class="mini" id="trans-read" title="朗读英文原文">🔊 读原文</button>
         <button class="mini" id="trans-copy">⧉ 复制</button>
         <button class="mini danger" id="trans-close">✕</button>
       </div>
     </div>
     <div class="trans-src" id="trans-src"></div>
     <div class="trans-body" id="trans-body"></div>
+  </div>
+
+  <!-- ======= 词义面板（单词语义：上下文推断 + 常规含义） ======= -->
+  <div id="word-panel" class="trans-panel" hidden>
+    <div class="trans-head">
+      <span class="trans-label">词义 · <span id="word-label"></span></span>
+      <div class="trans-actions">
+        <button class="mini" id="word-read" title="朗读该单词（英文）">🔊 朗读</button>
+        <button class="mini" id="word-copy">⧉ 复制</button>
+        <button class="mini danger" id="word-close">✕</button>
+      </div>
+    </div>
+    <div class="trans-src" id="word-context"></div>
+    <div class="trans-body" id="word-body"></div>
   </div>
 
   <!-- ======= 高亮气泡 ======= -->
