@@ -1147,6 +1147,8 @@ window.addEventListener('beforeunload', saveProgress);
 document.addEventListener('click', (e) => {
   // 点击高亮 mark 本身：由文章内的处理器弹出气泡，这里不能拦截关闭
   if (e.target.closest && e.target.closest('mark.hl')) return;
+  // 点击笔记列表（侧边栏）：由 sidebar-notes 处理器决定行为（如弹出词义卡片），不得在此关闭面板
+  if (e.target.closest && e.target.closest('#sidebar-notes')) return;
   if (!e.target.closest('#sel-toolbar') && !e.target.closest('#trans-panel')
     && !e.target.closest('#word-panel') && !e.target.closest('#hl-bubble')) {
     $('#trans-panel').hidden = true;
