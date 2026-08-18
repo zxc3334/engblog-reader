@@ -406,7 +406,11 @@ def api_put_config(cfg: ConfigIn):
 # ---------------- static ----------------
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    # no-cache：每次刷新都重新校验 index.html，确保拿到最新资源版本号（防止手机缓存旧版）
+    return FileResponse(
+        os.path.join(STATIC_DIR, "index.html"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
