@@ -750,6 +750,7 @@ function showWordPanel(s) {
   const body = $('#word-body');
   body.textContent = '';
   body.classList.remove('error');
+  $('#word-note').hidden = false; // 新查询允许存笔记
   panel.hidden = false; // 先显示才能测量尺寸
   const pw = panel.offsetWidth, ph = panel.offsetHeight;
   const r = s.rect;
@@ -765,6 +766,30 @@ function startWordMeaning(word, context) {
   transBusy = true;
   streamPanel($('#word-body'), '/api/word', { word, context })
     .finally(() => { transBusy = false; });
+}
+
+/** 展示已保存的词义笔记卡片（不重新调用 LLM） */
+function showSavedWordNote(h, anchorX, anchorY) {
+  const word = h.word || h.text || '';
+  $('#word-label').textContent = word;
+  const ctx = h.context || '';
+  const snip = ctx || word;
+  const i = ctx ? snip.indexOf(word) : -1;
+  $('#word-context').innerHTML = (ctx && i >= 0)
+    ? '…' + esc(snip.slice(0, i)) + '<b>' + esc(word) + '</b>' + esc(snip.slice(i + word.length)) + '…'
+    : esc(snip);
+  const body = $('#word-body');
+  body.classList.remove('error');
+  body.textContent = h.content || '（无词义内容）';
+  $('#word-note').hidden = true; // 已保存，隐藏存笔记按钮
+  const panel = $('#word-panel');
+  panel.hidden = false; // 先显示才能测量尺寸
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  let left = Math.max(8, Math.min(anchorX, window.innerWidth - pw - 8));
+  let top = anchorY + 8;
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, anchorY - ph - 8);
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
 }
 
 $('#word-close').addEventListener('click', () => { $('#word-panel').hidden = true; });
@@ -1095,6 +1120,12 @@ $('#sidebar-notes').addEventListener('click', async (e) => {
       $('#hl-bubble').hidden = true;
       toast('已删除');
     } catch (err) { toast(err.message); }
+    return;
+  }
+  // 词义笔记：打开保存的词义卡片（显示 LLM 上下文理解），划线笔记则跳转
+  const h = state.highlights.find((x) => x.id === hid);
+  if (h && h.kind === 'word') {
+    showSavedWordNote(h, e.clientX, e.clientY);
     return;
   }
   const mark = $(`mark.hl[data-hid="${hid}"]`);
