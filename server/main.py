@@ -362,7 +362,15 @@ async def api_word(w: WordIn):
 
 @app.post("/api/llm/test")
 async def api_test_llm(cfg: ConfigIn | None = None):
-    merged = save_config(cfg.model_dump(exclude_none=True)) if cfg else load_config()
+    """仅测试连通性，绝不写入配置（避免空 api_key 覆盖已存 key）。"""
+    merged = load_config()
+    if cfg:
+        d = cfg.model_dump(exclude_none=True)
+        if d.get("llm"):
+            merged["llm"].update({k: v for k, v in d["llm"].items() if v not in (None, "")})
+        for k in ("target_lang", "style", "tts_rate", "tts_voice", "tts_engine", "tts_voice_edge"):
+            if k in d:
+                merged[k] = d[k]
     return await llm.test_connection(merged)
 
 

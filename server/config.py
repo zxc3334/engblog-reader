@@ -54,7 +54,11 @@ def load_config() -> dict:
 def save_config(cfg: dict) -> dict:
     merged = load_config()
     if "llm" in cfg and isinstance(cfg["llm"], dict):
-        merged["llm"].update({k: v for k, v in cfg["llm"].items() if v is not None})
+        for k, v in cfg["llm"].items():
+            if k == "api_key" and not v:
+                continue  # 空字符串 = 用户未填写，保留已存的 key（防止误清空）
+            if v is not None:
+                merged["llm"][k] = v
     for key in ("target_lang", "style", "tts_rate", "tts_voice", "tts_engine", "tts_voice_edge"):
         if key in cfg:
             merged[key] = cfg[key]

@@ -438,12 +438,14 @@ $('#cfg-voice-test').addEventListener('click', () => {
 });
 $('#cfg-save').addEventListener('click', async () => {
   const engine = $('#cfg-tts-engine').value;
+  const llmCfg = {
+    base_url: $('#cfg-base-url').value.trim(),
+    model: $('#cfg-model').value.trim(),
+  };
+  const apiKeyInput = $('#cfg-api-key').value.trim();
+  if (apiKeyInput) llmCfg.api_key = apiKeyInput; // 留空 = 保持不变
   const body = {
-    llm: {
-      base_url: $('#cfg-base-url').value.trim(),
-      api_key: $('#cfg-api-key').value.trim(),
-      model: $('#cfg-model').value.trim(),
-    },
+    llm: llmCfg,
     target_lang: $('#cfg-target-lang').value.trim() || '中文',
     style: $('#cfg-style').value,
     tts_rate: parseFloat($('#cfg-tts-rate').value),
@@ -491,15 +493,15 @@ $('#cfg-test').addEventListener('click', async () => {
   const st = $('#cfg-status');
   st.textContent = '测试中…'; st.className = 'cfg-status';
   try {
+    const tllm = {
+      base_url: $('#cfg-base-url').value.trim(),
+      model: $('#cfg-model').value.trim(),
+    };
+    const tkey = $('#cfg-api-key').value.trim();
+    if (tkey) tllm.api_key = tkey; // 留空 = 用已存 key 测试
     const r = await api('/api/llm/test', {
       method: 'POST',
-      body: JSON.stringify({
-        llm: {
-          base_url: $('#cfg-base-url').value.trim(),
-          api_key: $('#cfg-api-key').value.trim(),
-          model: $('#cfg-model').value.trim(),
-        },
-      }),
+      body: JSON.stringify({ llm: tllm }),
     });
     st.textContent = r.message; st.className = 'cfg-status ' + (r.ok ? 'ok' : 'err');
   } catch (e) { st.textContent = e.message; st.className = 'cfg-status err'; }
